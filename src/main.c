@@ -26,6 +26,8 @@
 #include "switch_impl.h"
 #endif
 
+#include "variables.h"
+
 static void playAudio(Snes *snes, SDL_AudioDeviceID device, int16_t *audioBuffer);
 static void renderScreen(Snes *snes, SDL_Renderer *renderer, SDL_Texture *texture);
 static void SDLCALL AudioCallback(void *userdata, Uint8 *stream, int len);
@@ -65,7 +67,7 @@ enum {
 };
 
 static const char kWindowTitle[] = "SuperMet";
-static uint32 g_win_flags = SDL_WINDOW_RESIZABLE;
+static uint32 g_win_flags = SDL_WINDOW_SHOWN;
 static SDL_Window *g_window;
 
 static uint8 g_paused, g_turbo, g_replay_turbo = true, g_cursor = true;
@@ -311,6 +313,12 @@ static const struct RendererFuncs kSdlRendererFuncs = {
 
 
 
+
+int oldCameraX = 0;
+int oldCameraY = 0;
+bool reinitCamera = true;
+
+
 #undef main
 int main(int argc, char** argv) {
 #ifdef __SWITCH__
@@ -336,14 +344,14 @@ int main(int argc, char** argv) {
     g_config.enhanced_mode7 * kPpuRenderFlags_4x4Mode7 |
     g_config.extend_y * kPpuRenderFlags_Height240 |
     g_config.no_sprite_limits * kPpuRenderFlags_NoSpriteLimits;
-
+/*
   if (g_config.fullscreen == 1)
     g_win_flags ^= SDL_WINDOW_FULLSCREEN_DESKTOP;
   else if (g_config.fullscreen == 2)
     g_win_flags ^= SDL_WINDOW_FULLSCREEN;
-
+*/
   // Window scale (1=100%, 2=200%, 3=300%, etc.)
-  g_current_window_scale = (g_config.window_scale == 0) ? 2 : IntMin(g_config.window_scale, kMaxWindowScale);
+  g_current_window_scale = 1;//(g_config.window_scale == 0) ? 2 : IntMin(g_config.window_scale, kMaxWindowScale);
 
   // audio_freq: Use common sampling rates (see user config file. values higher than 48000 are not supported.)
   if (g_config.audio_freq < 11025 || g_config.audio_freq > 48000)
@@ -468,7 +476,7 @@ int main(int argc, char** argv) {
       }
       case SDL_MOUSEWHEEL:
         if (SDL_GetModState() & KMOD_CTRL && event.wheel.y != 0)
-          ChangeWindowScale(event.wheel.y > 0 ? 1 : -1);
+          //ChangeWindowScale(event.wheel.y > 0 ? 1 : -1);
         break;
       case SDL_MOUSEBUTTONDOWN:
         if (event.button.button == SDL_BUTTON_LEFT && event.button.state == SDL_PRESSED && event.button.clicks == 2) {
@@ -546,6 +554,36 @@ int main(int argc, char** argv) {
         lastTick = curTick;
       }
     }
+    
+    
+    
+    int newCameraX = layer1_x_pos;
+    int newCameraY = layer1_y_pos;
+    if (reinitCamera) {
+      oldCameraX = newCameraX;
+      oldCameraY = newCameraY;
+      reinitCamera = false;
+    }
+    if ((newCameraX != oldCameraY) || (newCameraY != oldCameraY)) {
+      
+      int oldWinX, oldWinY;
+      SDL_GetWindowPosition(g_window, &oldWinX, &oldWinY);
+      
+      SDL_Rect bounds;
+      SDL_GetDisplayUsableBounds(SDL_GetWindowDisplayIndex(g_window), &bounds);
+      
+      int newWinX = oldWinX + (newCameraX - oldCameraX);
+      int newWinY = oldWinY + (newCameraY - oldCameraY);
+      newWinX = IntMin(IntMax(bounds.x, newWinX), bounds.x + bounds.w - 256);
+      newWinY = IntMin(IntMax(bounds.y + 31, newWinY), bounds.y + bounds.h - 240);
+      
+      SDL_SetWindowPosition(g_window, newWinX, newWinY);
+      
+    }
+    oldCameraX = newCameraX;
+    oldCameraY = newCameraY;
+    
+    
   }
 
   if (g_config.autosave)
@@ -650,12 +688,14 @@ static void HandleCommand(uint32 j, bool pressed) {
       break;
     case kKeys_ClearKeyLog: RtlClearKeyLog(); break;
     case kKeys_StopReplay: RtlStopReplay(); break;
+    /*
     case kKeys_Fullscreen:
       g_win_flags ^= SDL_WINDOW_FULLSCREEN_DESKTOP;
       SDL_SetWindowFullscreen(g_window, g_win_flags & SDL_WINDOW_FULLSCREEN_DESKTOP);
       g_cursor = !g_cursor;
       SDL_ShowCursor(g_cursor);
       break;
+    */
     case kKeys_Reset:
       RtlReset(1);
       break;
@@ -674,8 +714,8 @@ static void HandleCommand(uint32 j, bool pressed) {
 #endif
       break;
     case kKeys_ReplayTurbo: g_replay_turbo = !g_replay_turbo; break;
-    case kKeys_WindowBigger: ChangeWindowScale(1); break;
-    case kKeys_WindowSmaller: ChangeWindowScale(-1); break;
+    //case kKeys_WindowBigger: ChangeWindowScale(1); break;
+    //case kKeys_WindowSmaller: ChangeWindowScale(-1); break;
     case kKeys_DisplayPerf: g_display_perf ^= 1; break;
     case kKeys_ToggleRenderer:
       g_ppu_render_flags ^= kPpuRenderFlags_NewRenderer;
